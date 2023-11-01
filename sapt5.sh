@@ -1,13 +1,17 @@
 #!/bin/bash
 
+#-L/-h legatura simbolica
+#grep -E '^[A-Z]{1,1}[a-zA-Z0-9 ,]*\.$' | grep -vE '(si[ ]*,)' | grep -v 'n[pb]'
+#scriere cale fisier daca se gasesste regex in fisier
+#count legatura simbolica
+#parcurgere director
+
 if [ "$#" -lt 2 ]
 then
     echo "Prea putine argumente"
 fi
 
-count=0;
-
-echo "" > "$2"
+count=0
 
 for entry in $1/*
 do
@@ -33,4 +37,3 @@ done
     
 
 echo "$count"	      
-
