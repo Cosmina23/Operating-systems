@@ -13,11 +13,11 @@
 
 #define MAX_R 100 //maximum length for result , in function 'result_char' and 'main'
 #define SIZE_D 256 //for the char in which the access rights are saved
-#define name 60
+#define NAME_SIZE 60
 
 //structura pentru a salva informatiile citire din fisier
 typedef struct fileInfo{
-  char filename[name];
+  char filename[NAME_SIZE];
   uint32_t width;
   uint32_t height;
   struct stat data;
