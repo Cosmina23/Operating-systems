@@ -10,9 +10,18 @@
 #include <locale.h>
 #include <langinfo.h>
 
+
 #define MAX_R 100 //maximum length for result , in function 'result_char' and 'main'
 #define SIZE_D 256 //for the char in which the access rights are saved
+#define name 60
 
+//structura pentru a salva informatiile citire din fisier
+typedef struct fileInfo{
+  char filename[name];
+  uint32_t width;
+  uint32_t height;
+  struct stat data;
+}fileInfo;
 
 // Function for verification number of arguments
 void checkArguments(int argc, char* argv[]) {
@@ -60,6 +69,7 @@ void Error(const char *function, int ret){
   }
 }
 
+
 //function to extract access rights
 char *drepturi(mode_t mode){  
   char *sir = malloc(SIZE_D);
@@ -86,6 +96,7 @@ char *drepturi(mode_t mode){
   return sir;
 }
 
+
 //function for writing the data in the output file
 void writeOutput(int file_des, char *output, const char* error_message){
   int return_value = 0;
@@ -94,11 +105,63 @@ void writeOutput(int file_des, char *output, const char* error_message){
   if(return_value == -1){
     Error(error_message, return_value);
   }
-
+  
 }
 
 
-int main(int argc, char* argv[]) {
+
+void readDataFromFile(int input_file, struct fileInfo *fileInfo) {
+  int return_value = 0;
+
+  return_value = lseek(input_file, 18, SEEK_CUR);
+  Error("lseek", return_value);
+
+  return_value = read(input_file, &(fileInfo->width), sizeof(fileInfo->width));
+  Error("read(width) ", return_value);
+
+  return_value = read(input_file, &(fileInfo->height), sizeof(fileInfo->height));
+  Error("read(height)", return_value);
+
+  return_value = stat(fileInfo->filename, &(fileInfo->data));
+  Error("stat", return_value);
+}
+
+
+void writeDataToFile(int output_file, fileInfo *fileInfo) {
+  int return_value = 0;
+  char result[MAX_R] = "";
+
+  sprintf(result, "nume fisier: %s\n", fileInfo->filename);
+  writeOutput(output_file, result, "Error write: nume");
+
+  sprintf(result, "inaltime: %u\n", fileInfo->width);
+  writeOutput(output_file, result, "Error write: width");
+
+  sprintf(result, "lungime: %u\n", fileInfo->height);
+  writeOutput(output_file, result, "Error write: height");
+
+  sprintf(result, "dimensiune: %lu\n", fileInfo->data.st_size);
+  writeOutput(output_file, result, "Error write: size");
+
+  sprintf(result, "identificatorul utilizatorului: %u\n", fileInfo->data.st_uid);
+  writeOutput(output_file, result, "Error write: uid");
+
+  struct tm dt;
+  dt = *(gmtime(&(fileInfo->data.st_ctime)));
+  sprintf(result, "timpul ultimei modificari: %d.%d.%d\n", dt.tm_mday + 1, dt.tm_mon + 1, dt.tm_year + 1900);
+  writeOutput(output_file, result, "Error write: time");
+
+  sprintf(result, "contorul de legaturi: %ld\n", fileInfo->data.st_nlink);
+  writeOutput(output_file, result, "Error write: nr links");
+
+  char *rez = drepturi(fileInfo->data.st_mode);
+  return_value = write(output_file, rez, strlen(rez));
+  Error("write rights", return_value);
+
+  free(rez);
+}
+
+int main(int argc, char *argv[]){
   checkArguments(argc, argv);//check number of arguments
   
   char* filepath = argv[1];
@@ -106,81 +169,27 @@ int main(int argc, char* argv[]) {
   checkRegularFile(filepath);//check if it's a regular file
   checkFileExtension(filepath);//check if it's a bmp file
 
-
   //Open input file
   int input_file = open(filepath, O_RDONLY);
   Error("open input ", input_file);
 
-  
-  uint32_t width, height;
-  char result[MAX_R] = "";
-  struct stat data;
-  int return_value = -1; //variabila auxiliare in care se stocheaza valoarea returnata de functia sistem apelat la un moment dat pentru a verifica daca aceasta a functionat corect
- 
-  
-  return_value = lseek(input_file, 18, SEEK_CUR);//set the cursor to extract width and height
-  Error("lseek", return_value);
-   
-  return_value = read(input_file, &width, sizeof(width));
-  Error("read(width) ", return_value);
-  
-  return_value = read(input_file, &height, sizeof(height));
-  Error("read(height)", return_value);
+  fileInfo data;
+  strcpy(data.filename, filepath);
 
-  return_value = stat(filepath,&data);
-  Error("stat", return_value);
+  readDataFromFile(input_file, &data);
 
-  //Close input file
-  return_value = close(input_file);
-  Error("close", return_value);
+   int output_file;
+  (output_file = open("statistica2.txt", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR));
+  Error("open output", output_file);
 
-  //Open output file
-  int output_file;
-  (output_file = open("statistica.txt", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR));
-  Error("open output",output_file);
+  writeDataToFile(output_file, &data);
 
-  sprintf(result, "nume fisier: %s\n", argv[1]);
-  writeOutput(output_file, result, "Error write:  nume");
+  int return_value = close(input_file);
+  Error("close input", return_value);
 
-  sprintf(result, "inaltime: %u\n", width);
-  writeOutput(output_file, result, "Error write: width");
-
-  sprintf(result, "lungime: %u\n", height);
-  writeOutput(output_file, result, "Error write: height");
-
-  sprintf(result, "dimensiune: %lu\n", data.st_size);//sau ld in loc de lu
-  writeOutput(output_file,result, "Error write: size");
-  
-  sprintf(result, "identificatorul utilizatorului: %u\n", data.st_uid);
-  writeOutput(output_file, result, "Error write: uid");
-
-  //extract the date of the last modification
-  struct tm dt;
-  dt = *(gmtime(&data.st_ctime));
-  
-  sprintf(result, "timpul ultimei modificari: %d.%d.%d\n",dt.tm_mday+1, dt.tm_mon+1, dt.tm_year+1900);
-  writeOutput(output_file, result, "Error write: time");
-  
-  sprintf(result, "contorul de legaturi: %ld\n", data.st_nlink);
-  writeOutput(output_file, result, "Error write: nr links");
-  
-  //Access rights:
-  char *rez = (char*)malloc(SIZE_D*sizeof(rez));
-  if(rez == NULL){
-    perror("Error malloc");
-    exit(-1);
-  }
-
-  rez[0]='\0';
-  rez = drepturi(data.st_mode);
-  return_value = write(output_file, rez, strlen(rez));
-  Error("write rights", return_value);
-
-  //Close output file
   return_value = close(output_file);
   Error("close output", return_value);
 
-  free(rez);
-  
+    
   return 0;
 }
