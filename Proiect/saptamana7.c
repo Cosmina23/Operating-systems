@@ -11,40 +11,37 @@
 #include <langinfo.h>
 #include <dirent.h>
 
-#define MAX_R 100 //maxim size for result
-#define SIZE_D 256 //maxim size, used in function 'drepturi'
-#define NAME_SIZE 60 //mazim size for name, used in 'fileInfo' structure 
 
-//structure to save file information
-typedef struct fileInfo {
-  char filename[NAME_SIZE];
-  uint32_t width;
-  uint32_t height;
-  struct stat data;
-} fileInfo;
+#define NR_A 2 //number of arguments
+#define SIZE_D 256 //for access rights char
+#define SEEK_BYTES 18 //number of bytes to be skipped
+#define MAX_R 4096 //maximum length for result
 
-//function to check number of arguments
+char *output = "statistica.txt"; //output file name
+
+// Function for verification number of arguments
 void checkArguments(int argc, char* argv[]) {
-  if (argc != 2) {
-    printf("Usage %s <director_intrare>\n", argv[0]);
+  if (argc != NR_A) {
+    printf("Usage %s <fisier_intrare>\n", argv[0]);
     exit(-1);
   }
 }
 
-//function to check if it's a bmp file
-void checkFileExtension(char* filename) {
+// Function for verification file extension
+int checkFileExtension(char* filename) {
   char* file_extension = strrchr(filename, '.');
   if (file_extension != NULL) {
     file_extension++;
-    if (strcmp(file_extension, "bmp") != 0) {
-      perror("Input file is not a bmp file");
-      exit(-1);
+    if (strcmp(file_extension, "bmp") == 0) {
+      return 1;
     }
   }
+    
+  return 0;
 }
 
-//check if it's a regular file
-void checkRegularFile(const char* filename) {
+// Function for checking if it's a regular file
+void checkFile(char* filename) {
   struct stat info;
   if (stat(filename, &info) == -1) {
     perror("Error in stat function");
@@ -57,19 +54,32 @@ void checkRegularFile(const char* filename) {
   }
 }
 
-//function to check and print if it's an error
-void Error(const char* function, int ret) {
-  if (ret == -1) {
+//functie pentru testarea valorii returnate de functiile sistem folosite in program, functioneaza pentru functiile care returneaza -1 in caz de eroare
+void Error(const char *function, int ret){
+  if(ret == -1){
     printf("Error in %s function\n", function);
     exit(-1);
   }
 }
 
-//function to extract the access rights
-char* drepturi(mode_t mode) {
-  char* sir = malloc(SIZE_D);
+
+//function for writing the data in the output file
+void writeOutput(int file_des, char *output, const char* error_message){
+  int return_value = 0;
+  
+  return_value = write(file_des, output, strlen(output));
+  if(return_value == -1){
+    Error(error_message, return_value);
+  }
+}
+
+
+//function to extract access rights
+char *drepturi(struct stat *data_file){  
+  char *sir = malloc(SIZE_D);
+  mode_t mode = data_file->st_mode;
   if (sir == NULL) {
-    perror("Error allocating memory");
+    perror("Error allocating memoryin 'drepturi' ");
     exit(-1);
   }
   
@@ -87,199 +97,190 @@ char* drepturi(mode_t mode) {
 	  (mode & S_IROTH) ? 'R' : '-',
 	  (mode & S_IWOTH) ? 'W' : '-',
 	  (mode & S_IXOTH) ? 'X' : '-');
-  
-  sprintf(sir + strlen(sir), "\n");
+
+  sprintf(sir + strlen(sir), "\n\n");
   return sir;
 }
 
-
-//function to write the output in a file using file descriptor
-void writeOutput(int file_des, char* output, const char* error_message) {
-  int return_value = 0;
+//extract data from input file
+void read_bmp_reg(int filedes_in, char* filename, uint32_t w_h[2], struct stat *data_file){
   
-  return_value = write(file_des, output, strlen(output));
-  Error(error_message, return_value);
-}
+  int return_value = 0; //use to check if it's an error
 
-//write infos in output file if the input file is a regular or a bmp file
-//argument bmp is 1 when is a bmp file, 0 if is a regular file
-void writeFileInfo(int output_file, fileInfo* fileInfo, int bmp) {
-  char result[MAX_R] = "";
-  
-  sprintf(result, "nume fisier: %s\n", fileInfo->filename);
-  writeOutput(output_file, result, "Error write: nume");
-
-  //if is a bmp file write width and height
-  if(bmp){
-    sprintf(result, "inaltime: %u\n", fileInfo->width);
-    writeOutput(output_file, result, "Error write: width");
+  //if the input file is bmp fileread width and height 
+  if(checkFileExtension(filename) == 1){ 
+    return_value = lseek(filedes_in, SEEK_BYTES, SEEK_CUR);//set the currsor
+    Error("lseek in 'read_bmp_reg'", return_value);
     
-    sprintf(result, "lungime: %u\n", fileInfo->height);
-    writeOutput(output_file, result, "Error write: height");
-  }
-  
-  sprintf(result, "dimensiune: %lu\n", fileInfo->data.st_size);
-  writeOutput(output_file, result, "Error write: size");
-  
-  sprintf(result, "identificatorul utilizatorului: %u\n", fileInfo->data.st_uid);
-  writeOutput(output_file, result, "Error write: uid");
-  
-  
-  struct tm dt;
-  dt = *(gmtime(&(fileInfo->data.st_ctime)));
-  sprintf(result, "timpul ultimei modificari: %d.%d.%d\n", dt.tm_mday + 1, dt.tm_mon + 1, dt.tm_year + 1900);
-  writeOutput(output_file, result, "Error write: time");
-  
-  sprintf(result, "contorul de legaturi: %ld\n", fileInfo->data.st_nlink);
-  writeOutput(output_file, result, "Error write: nr links");
-  
-  int return_value = 0;
-  char *rez = drepturi(fileInfo->data.st_mode);
-  return_value = write(output_file, rez, strlen(rez));
-  Error("write rights", return_value);
-  
-  free(rez);
-}
-
-//function for write infos for LINK
-void writeLinkInfo(int output_file, fileInfo* fileInfo) {
-  int return_value = 0;
-  char result[MAX_R] = "";
-  
-  sprintf(result, "nume legatura: %s\n", fileInfo->filename);
-  writeOutput(output_file, result, "Error write: nume");
-  
-  sprintf(result, "dimensiune legatura: %ld\n", fileInfo->data.st_size);
-  writeOutput(output_file, result, "Error write: dimensiune legatura");
-  
-  struct stat file_info;
-  stat(fileInfo->filename,&file_info);
-  
-  sprintf(result, "dimensiune fisier target: %ld\n", file_info.st_size);
-  writeOutput(output_file, result, "Error write: dimensiune legatura");
-  
-  
-  char* rez = drepturi(fileInfo->data.st_mode);
-  return_value = write(output_file, rez, strlen(rez));
-  Error("write rights", return_value);
-  
-  free(rez);
-}
-
-//function for write infos about Directory
-void writeDirectoryInfo(int output_file, fileInfo* fileInfo) {
-  int return_value = 0;
-  char result[MAX_R] = "";
-  
-  sprintf(result, "nume director: %s\n", fileInfo->filename);
-  writeOutput(output_file, result, "Error write: nume director");
-  
-  sprintf(result, "identificatorul utilizatorului: %u\n", fileInfo->data.st_uid);
-  writeOutput(output_file, result, "Error write: uid");
-  
-  char* rez = drepturi(fileInfo->data.st_mode);
-  return_value = write(output_file, rez, strlen(rez));
-  Error("write rights", return_value);
-  
-  free(rez);
-}
-
-
-void processFile(int output_file, const char* filePath, char *filename) {
-  fileInfo data;
-  strcpy(data.filename, filePath);
-  int bmp = 0;
-  
-  char* file_extension = strrchr(filename, '.');
-  if (file_extension != NULL) {
-    file_extension++;
-    if (strcmp(file_extension, "bmp") == 0) {
-      bmp = 1;
-    }
-  }
-  
-  int file_descriptor = open(filePath, O_RDONLY);
-  if (file_descriptor == -1) {
-    perror("Error opening file");
-    exit(EXIT_FAILURE);
-  }
-  
-  if (bmp) {
-    int return_value = lseek(file_descriptor, 18, SEEK_CUR);
-    Error("lseek", return_value);
+    return_value = read(filedes_in, &w_h[0], sizeof(w_h[0]));
+    Error("read width 'read_bmp_reg'", return_value);
     
-    return_value = read(file_descriptor, &(data.width), sizeof(data.width));
-    Error("read(width)", return_value);
-    
-    return_value = read(file_descriptor, &(data.height), sizeof(data.height));
-    Error("read(height)", return_value);
+    return_value = read(filedes_in, &w_h[1], sizeof(w_h[1]));
+    Error("read height in 'read_bmp_reg'", return_value);
   }
-  
-  close(file_descriptor);
-  
-  int return_value = lstat(data.filename, &(data.data));
-  Error("stat", return_value);
-  
-  if (S_ISREG(data.data.st_mode)) {
-    writeFileInfo(output_file, &data, bmp);
-  } else if (S_ISLNK(data.data.st_mode)) {
-    writeLinkInfo(output_file, &data);
-  } else if (S_ISDIR(data.data.st_mode)) {
-    writeDirectoryInfo(output_file, &data);
-  }
+
+  return_value = stat(filename, data_file);
+  Error("stat in 'read_bmp_reg'", return_value);
 }
 
 
-//function for going through the directory
-void processDirectory(const char* dirPath, int output_file) {
-  DIR* dir = opendir(dirPath);//open directory
-  struct dirent* entry;
+//function to write data in 'statistica.txt'
+void write_bmp_reg(char* filename, uint32_t w_h[2], struct stat *data_file, int filedes_out){
+  char result[MAX_R];
+  char *rights = drepturi(data_file);
 
-  if (dir == NULL) {//check if the directory exists
-    perror("Error opening directory");
+  //the time of the last modification of the content
+  //if the name or data had to be modified: st->ctime
+  struct tm *dt = gmtime(&data_file->st_mtime);
+  if (dt == NULL) {
+    perror("Error in gmtime function");
     exit(-1);
   }
 
-  //read file one by one from the directory
-  while ((entry = readdir(dir)) != NULL) {
+  sprintf(result, "nume fisier: %s\n", filename);
+  writeOutput(filedes_out, result, "Error write: nume");
+
+  //if the input file is bmp file write height and width
+  if(checkFileExtension(filename) == 1){
+    sprintf(result, "inaltime: %u\n", w_h[0]);
+    writeOutput(filedes_out, result, "Error write: width in write_bmp_reg");
+    
+    sprintf(result, "lungime: %u\n", w_h[1]);
+    writeOutput(filedes_out, result, "Error write: height in write_bmp_reg");
+  }
+  
+  sprintf(result, "dimensiune: %lu\n", data_file->st_size);
+  writeOutput(filedes_out, result, "Error write: size in write_bmp_reg");
+
+  sprintf(result, "identificatorul utilizatorului: %u\n", data_file->st_uid);
+  writeOutput(filedes_out, result, "Error write: uid in write_bmp_reg");
+
+  sprintf(result, "timpul ultimei modificari: %d.%d.%d\n", dt->tm_mday + 1, dt->tm_mon + 1, dt->tm_year + 1900);
+  writeOutput(filedes_out, result, "Error write: time in write_bmp_reg");
+
+  sprintf(result, "contorul de legaturi: %ld\n", data_file->st_nlink);
+  writeOutput(filedes_out, result, "Error write: nr links in write_bmp_reg");
+
+  writeOutput(filedes_out, rights, "Error write: rigths in write_bmp_reg");
+}
+
+void write_link(char* filename_link, char* filePath_input, struct stat *data_file, int filedes_out){
+  int return_value = 0;
+  char result[MAX_R];
+  struct stat target_info;
+  
+  return_value = stat(filePath_input,&target_info);
+  Error("stat in write_link", return_value);
+
+  //check if the target is a regular file
+  if(S_ISREG(target_info.st_mode)){
+    sprintf(result, "nume legatura: %s\n", filename_link);
+    writeOutput(filedes_out, result, "Error write: nume in write_link");
+    
+    sprintf(result, "dimensiune: %ld\n", data_file->st_size);
+    writeOutput(filedes_out, result, "Error write: dimensiune in write_link");
+    
+    
+    sprintf(result, "dimensiune fisier: %lu\n", target_info.st_size);
+    writeOutput(filedes_out, result, "Error write: dimensiune fisier in write_link");
+    
+    
+    char* rez = drepturi(data_file);
+    return_value = write(filedes_out, rez, strlen(rez));
+    Error("write rights in write_link", return_value);
+    
+    free(rez);
+  }
+}
+
+void write_directory(char *filename_in, struct stat *data_file, int filedes_out){
+  int return_value = 0;
+  char result[MAX_R];
+
+  
+  sprintf(result, "nume director: %s\n", filename_in);
+  writeOutput(filedes_out, result, "Error write: nume director in write_diretory");
+  
+  sprintf(result, "identificatorul utilizatorului: %u\n", data_file->st_uid);
+  writeOutput(filedes_out, result, "Error write: uid in write_diretory");
+  
+  char* rez = drepturi(data_file);
+  return_value = write(filedes_out, rez, strlen(rez));
+  Error("write rights in write_diretory", return_value);
+  
+  free(rez);
+}
+
+//filePath_input - calea catre fisierul de intrare
+//filename_input - numele fisierului
+void processFile(char *filePath_input, char* filename_input, int filedes_out){
+  int return_value = 0;
+  struct stat data_file;
+  uint32_t w_h[2];
+  
+  //used lstat because if it's a link will return link info
+  return_value = lstat(filePath_input, &data_file);
+  Error("lstat in processFile",return_value);
+
+  //read data from file
+  int filedes_in = open(filePath_input, O_RDONLY);
+  Error("Open input file in processFile", filedes_in); //check if the file is open
+
+  
+  if(S_ISREG(data_file.st_mode)){
+    read_bmp_reg(filedes_in,filePath_input, w_h, &data_file);
+    write_bmp_reg(filename_input, w_h, &data_file, filedes_out);
+  } else if(S_ISLNK(data_file.st_mode)){
+    write_link(filename_input, filePath_input, &data_file, filedes_out);
+  } else if(S_ISDIR(data_file.st_mode)){
+    write_directory(filename_input, &data_file, filedes_out);
+  }
+  
+
+  return_value = close(filedes_in);
+  Error("close input in processFile",return_value);
+  
+}
+
+
+int main(int argc, char* argv[]){
+
+  checkArguments(argc, argv); //check number of arguments
+
+  char *dir_name = argv[1];
+  //char *filename = argv[1]; //input file name
+  struct dirent* entry;
+  
+  
+  //deschide director intrare
+  DIR* dir = opendir(dir_name);
+  if(dir == NULL){
+    perror("Error opening directory in main");
+    exit(-1);
+  }
+
+  int filedes_out = open(output, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR);
+  Error("open output in main", filedes_out);
+  
+
+  //parcurgere diretor
+  while((entry = readdir(dir)) != NULL){
     if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
       char filePath[PATH_MAX];//make the absolute path for file
       //example: file ex1.c from directory SO: 
-      strcpy(filePath, dirPath);//add 'SO' => 'SO'
+      strcpy(filePath, dir_name);//add 'SO' => 'SO'
       strcat(filePath, "/");//add '/' => 'SO/'
       strcat(filePath, entry->d_name); //add file name 'ex1.c' => 'SO/ex1.c'
-      processFile(output_file, filePath, entry->d_name);
-      
+      processFile(filePath, entry->d_name, filedes_out); 
     }
   }
   
-  closedir(dir);
-}
+  int return_value = close(filedes_out);
+  Error("close output in main",return_value);
 
-int main(int argc, char* argv[]) {
-  
-  checkArguments(argc, argv);
-  
-  char* dirPath = argv[1];
-  struct stat st;
-  if(stat(dirPath, &st) == -1){
-    perror("Error in stat");
-    exit(EXIT_FAILURE);
-  }
-  
-  // Open output file
-  int output_file = open("statistica.txt", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR);
-  Error("open output", output_file);
-  
-  if (S_ISDIR(st.st_mode)) {
-    processDirectory(dirPath, output_file);
-  } else {
-    printf("%s is not a directory\n", dirPath);
-    exit(-1);
-  }
-  
-  int return_value = close(output_file);
-  Error("close output", return_value);
-  
+  //inchide director intrare
+  return_value = closedir(dir);
+  Error("close input directory in main", return_value);
+    
   return 0;
 }
