@@ -10,22 +10,16 @@
 #include <locale.h>
 #include <langinfo.h>
 
+#define NR_A 2 //number of arguments
+#define SIZE_D 256 //for access rights char
+#define SEEK_BYTES 18 //number of bytes to be skipped
+#define MAX_R 4096 //maximum length for result
 
-#define MAX_R 100 //maximum length for result , in function 'result_char' and 'main'
-#define SIZE_D 256 //for the char in which the access rights are saved
-#define NAME_SIZE 60
-
-//structura pentru a salva informatiile citire din fisier
-typedef struct fileInfo{
-  char filename[NAME_SIZE];
-  uint32_t width;
-  uint32_t height;
-  struct stat data;
-}fileInfo;
+char *output = "statistica.txt"; //output file name
 
 // Function for verification number of arguments
 void checkArguments(int argc, char* argv[]) {
-  if (argc != 2) {
+  if (argc != NR_A) {
     printf("Usage %s <fisier_intrare>\n", argv[0]);
     exit(-1);
   }
@@ -60,7 +54,6 @@ void checkRegularFile(char* filename) {
   }
 }
 
-
 //functie pentru testarea valorii returnate de functiile sistem folosite in program, functioneaza pentru functiile care returneaza -1 in caz de eroare
 void Error(const char *function, int ret){
   if(ret == -1){
@@ -69,10 +62,44 @@ void Error(const char *function, int ret){
   }
 }
 
+//extract data from input file
+void read_bmp(char* filename, uint32_t w_h[2], struct stat *data_file){
+  int filedes_in = open(filename, O_RDONLY);
+  Error("Open input file ", filedes_in); //check if the bmp file is open
+
+  int return_value = 0; //use to check if it's an error
+
+  return_value = lseek(filedes_in, SEEK_BYTES, SEEK_CUR);//set the currsor
+  Error("leek", return_value);
+
+  return_value = read(filedes_in, &w_h[0], sizeof(w_h[0]));
+  Error("read width", return_value);
+
+  return_value = read(filedes_in, &w_h[1], sizeof(w_h[1]));
+  Error("read height", return_value);
+
+  return_value = stat(filename, data_file);
+  Error("stat", return_value);
+
+  return_value = close(filedes_in);
+  Error("close input file", return_value);
+}
+
+//function for writing the data in the output file
+void writeOutput(int file_des, char *output, const char* error_message){
+  int return_value = 0;
+  
+  return_value = write(file_des, output, strlen(output));
+  if(return_value == -1){
+    Error(error_message, return_value);
+  }
+}
+
 
 //function to extract access rights
-char *drepturi(mode_t mode){  
+char *drepturi(struct stat *data_file){  
   char *sir = malloc(SIZE_D);
+  mode_t mode = data_file->st_mode;
   if (sir == NULL) {
     perror("Error allocating memory");
     exit(-1); 
@@ -97,99 +124,65 @@ char *drepturi(mode_t mode){
 }
 
 
-//function for writing the data in the output file
-void writeOutput(int file_des, char *output, const char* error_message){
+//function to write data in 'statistica.txt'
+void write_bmp(char* filename, uint32_t w_h[2], struct stat *data_file){
   int return_value = 0;
-  
-  return_value = write(file_des, output, strlen(output));
-  if(return_value == -1){
-    Error(error_message, return_value);
+  char result[MAX_R];
+  char *rights = drepturi(data_file);
+
+  //open output_file
+  int filedes_out = open(output, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR);
+  Error("open output", filedes_out);
+
+  //the time of the last modification of the content
+  //if the name or data had to be modified: st->ctime
+  struct tm *dt = gmtime(&data_file->st_mtime);
+  if (dt == NULL) {
+    perror("Error in gmtime function");
+    exit(-1);
   }
+
+  sprintf(result, "nume fisier: %s\n", filename);
+  writeOutput(filedes_out, result, "Error write: nume");
+
+  sprintf(result, "inaltime: %u\n", w_h[0]);
+  writeOutput(filedes_out, result, "Error write: width");
+
+  sprintf(result, "lungime: %u\n", w_h[1]);
+  writeOutput(filedes_out, result, "Error write: height");
+
+  sprintf(result, "dimensiune: %lu\n", data_file->st_size);
+  writeOutput(filedes_out, result, "Error write: size");
+
+  sprintf(result, "identificatorul utilizatorului: %u\n", data_file->st_uid);
+  writeOutput(filedes_out, result, "Error write: uid");
+
+  sprintf(result, "timpul ultimei modificari: %d.%d.%d\n", dt->tm_mday + 1, dt->tm_mon + 1, dt->tm_year + 1900);
+  writeOutput(filedes_out, result, "Error write: time");
+
+  sprintf(result, "contorul de legaturi: %ld\n", data_file->st_nlink);
+  writeOutput(filedes_out, result, "Error write: nr links");
+
+  writeOutput(filedes_out, rights, "Error write: rigths");
   
-}
-
-
-
-void readDataFromFile(int input_file, struct fileInfo *fileInfo) {
-  int return_value = 0;
-
-  return_value = lseek(input_file, 18, SEEK_CUR);
-  Error("lseek", return_value);
-
-  return_value = read(input_file, &(fileInfo->width), sizeof(fileInfo->width));
-  Error("read(width) ", return_value);
-
-  return_value = read(input_file, &(fileInfo->height), sizeof(fileInfo->height));
-  Error("read(height)", return_value);
-
-  return_value = stat(fileInfo->filename, &(fileInfo->data));
-  Error("stat", return_value);
-}
-
-
-void writeDataToFile(int output_file, fileInfo *fileInfo) {
-  int return_value = 0;
-  char result[MAX_R] = "";
-
-  sprintf(result, "nume fisier: %s\n", fileInfo->filename);
-  writeOutput(output_file, result, "Error write: nume");
-
-  sprintf(result, "inaltime: %u\n", fileInfo->width);
-  writeOutput(output_file, result, "Error write: width");
-
-  sprintf(result, "lungime: %u\n", fileInfo->height);
-  writeOutput(output_file, result, "Error write: height");
-
-  sprintf(result, "dimensiune: %lu\n", fileInfo->data.st_size);
-  writeOutput(output_file, result, "Error write: size");
-
-  sprintf(result, "identificatorul utilizatorului: %u\n", fileInfo->data.st_uid);
-  writeOutput(output_file, result, "Error write: uid");
-
-  struct tm dt;
-  dt = *(gmtime(&(fileInfo->data.st_ctime)));
-  sprintf(result, "timpul ultimei modificari: %d.%d.%d\n", dt.tm_mday + 1, dt.tm_mon + 1, dt.tm_year + 1900);
-  writeOutput(output_file, result, "Error write: time");
-
-  sprintf(result, "contorul de legaturi: %ld\n", fileInfo->data.st_nlink);
-  writeOutput(output_file, result, "Error write: nr links");
-
-  char *rez = drepturi(fileInfo->data.st_mode);
-  return_value = write(output_file, rez, strlen(rez));
-  Error("write rights", return_value);
-
-  free(rez);
-}
-
-int main(int argc, char *argv[]){
-  checkArguments(argc, argv);//check number of arguments
-  
-  char* filepath = argv[1];
-  
-  checkRegularFile(filepath);//check if it's a regular file
-  checkFileExtension(filepath);//check if it's a bmp file
-
-  //Open input file
-  int input_file = open(filepath, O_RDONLY);
-  Error("open input ", input_file);
-
-  fileInfo data;
-  strcpy(data.filename, filepath);
-
-  readDataFromFile(input_file, &data);
-
-   int output_file;
-  (output_file = open("statistica2.txt", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR));
-  Error("open output", output_file);
-
-  writeDataToFile(output_file, &data);
-
-  int return_value = close(input_file);
-  Error("close input", return_value);
-
-  return_value = close(output_file);
+  //close output file
+  return_value = close(filedes_out);
   Error("close output", return_value);
+}
 
-    
+int main(int argc, char* argv[]){
+
+  checkArguments(argc, argv); //check number of arguments
+
+  char *filename = argv[1]; //input file name
+  uint32_t w_h[2]; //width = w_h[0]  and  height = w_h[1]
+  struct stat data_info;
+  
+  checkRegularFile(filename);
+  checkFileExtension(filename);
+
+  read_bmp(filename, w_h, &data_info);
+  write_bmp(filename, w_h, &data_info);
+  
   return 0;
 }
