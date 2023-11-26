@@ -22,7 +22,7 @@ char *output = "statistica.txt"; //output file name
 // Function for verification number of arguments
 void checkArguments(int argc, char* argv[]) {
   if (argc != NR_A) {
-    printf("Usage %s <fisier_intrare>\n", argv[0]);
+    printf("Usage %s <director_intrare>\n", argv[0]);
     exit(-1);
   }
 }
