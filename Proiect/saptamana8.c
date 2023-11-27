@@ -120,7 +120,8 @@ void read_bmp_reg(char* filepath_in, char* filename, uint32_t w_h[2], struct sta
 
 
 //function to write bmp data
-void write_bmp_reg(char* dirpath_out,char* filename, uint32_t w_h[2], struct stat *data_file, int bmp){
+int write_bmp_reg(char* dirpath_out,char* filename, uint32_t w_h[2], struct stat *data_file, int bmp){
+  int nr_lines = 0;
   int return_value = 0; //used to check 'close' 
   char result[MAX_R];
   char *rights = drepturi(data_file);
@@ -156,37 +157,48 @@ void write_bmp_reg(char* dirpath_out,char* filename, uint32_t w_h[2], struct sta
   //PRINT FILE NAME--------------------------------
   sprintf(result, "nume fisier: %s\n", file_name);
   writeOutput(filedes_out, result, "Error write: nume in write_bmp_reg");
+  nr_lines++;
 
   //if the input file is bmp file write height and width
   if(bmp){
     sprintf(result, "inaltime: %u\n", w_h[0]);
     writeOutput(filedes_out, result, "Error write: width in write_bmp_reg");
+    nr_lines++;
     
     sprintf(result, "lungime: %u\n", w_h[1]);
     writeOutput(filedes_out, result, "Error write: height in write_bmp_reg");
+    nr_lines++;
   }
   
   sprintf(result, "dimensiune: %lu\n", data_file->st_size);
   writeOutput(filedes_out, result, "Error write: size in write_bmp_reg");
+  nr_lines++;
 
   sprintf(result, "identificatorul utilizatorului: %u\n", data_file->st_uid);
   writeOutput(filedes_out, result, "Error write: uid in write_bmp_reg");
+  nr_lines++;
 
   sprintf(result, "timpul ultimei modificari: %d.%d.%d\n", dt->tm_mday + 1, dt->tm_mon + 1, dt->tm_year + 1900);
   writeOutput(filedes_out, result, "Error write: time in write_bmp_reg");
+  nr_lines++;
 
   sprintf(result, "contorul de legaturi: %ld\n", data_file->st_nlink);
   writeOutput(filedes_out, result, "Error write: nr links in write_bmp_reg");
+  nr_lines++;
 
   writeOutput(filedes_out, rights, "Error write: rigths in write_bmp_reg");
+  nr_lines += 3;
 
   return_value = close(filedes_out);
   sprintf(result, "close %s in write_bmp_reg", out_file);
   Error(result, return_value);
+
+  return nr_lines;
 }
 
 
-void write_link(char* dirpath_out, char* filename_link, char* filePath_input, struct stat *data_file){
+int write_link(char* dirpath_out, char* filename_link, char* filePath_input, struct stat *data_file){
+  int nr_lines = 0;
   int return_value = 0;
   char result[MAX_R];
   struct stat target_info;
@@ -222,17 +234,21 @@ void write_link(char* dirpath_out, char* filename_link, char* filePath_input, st
     //check if the target is a regular file
     sprintf(result, "nume legatura: %s\n", filename_link);
     writeOutput(filedes_out, result, "Error write: nume in write_link");
+    nr_lines++;
     
     sprintf(result, "dimensiune: %ld\n", data_file->st_size);
     writeOutput(filedes_out, result, "Error write: dimensiune in write_link");
+    nr_lines++;
     
     sprintf(result, "dimensiune fisier: %lu\n", target_info.st_size);
     writeOutput(filedes_out, result, "Error write: dimensiune fisier in write_link");
+    nr_lines++;
     
     char* rez = drepturi(data_file);
     return_value = write(filedes_out, rez, strlen(rez));
     sprintf(result, "write rights for %s in write_link", filename_link);
     Error(result, return_value);
+    nr_lines += 3;
     
     free(rez);
     
@@ -240,12 +256,14 @@ void write_link(char* dirpath_out, char* filename_link, char* filePath_input, st
     sprintf(result,"close %s in write_link", filename_link);
     Error(result, return_value);
   }
+  return nr_lines;
 }
 
 
-void write_directory(char* dirpath_out, char *filename_in, char* filepath, struct stat *data_file){
+int write_directory(char* dirpath_out, char *filename_in, char* filepath, struct stat *data_file){
   int return_value = 0;
   char result[MAX_R];
+  int nr_lines = 0;
 
   //get the file name without extension
   char out_file[MAX_LENGTH];
@@ -269,20 +287,25 @@ void write_directory(char* dirpath_out, char *filename_in, char* filepath, struc
   
   sprintf(result, "nume director: %s\n", filename_in);
   writeOutput(filedes_out, result, "Error write: nume director in write_diretory");
+  nr_lines += 1;
   
   sprintf(result, "identificatorul utilizatorului: %u\n", data_file->st_uid);
   writeOutput(filedes_out, result, "Error write: uid in write_diretory");
+  nr_lines += 1;
   
   char* rez = drepturi(data_file);
   return_value = write(filedes_out, rez, strlen(rez));
   sprintf(result, "write drepturi for %s in write_directory", filename_in);
   Error(result, return_value);
+  nr_lines += 3;
   
   free(rez);
   
   return_value = close(filedes_out);
   sprintf(result,"close %s in write_directory", filename_in);
   Error(result, return_value);
+
+  return nr_lines;
 }
 
 int main(int argc, char* argv[]){
@@ -296,6 +319,7 @@ int main(int argc, char* argv[]){
   DIR* dir = opendir(dirpath_in);//open directory
   struct dirent* entry;
   char entry_name[MAX_LENGTH];
+  int nr_lines = 0;
 
   if (dir == NULL) {//check if the directory exists
     perror("Error opening directory");
@@ -316,35 +340,54 @@ int main(int argc, char* argv[]){
       return_value = lstat(filePath, &file_type);
       Error("lstat in main", return_value);
       
-      int pid = fork();
-      if(pid == -1){
+      pid_t pid = fork();
+      pid_t w ;
+      int wstatus;
+      if(pid == -1){//error code
 	perror("Error in fork");
-	exit(-1);
+	exit(EXIT_FAILURE);
       }
       if(pid == 0){//child code
+	printf("Child PID: %jd ->  ", (intmax_t) getpid());
+	
 	if(S_ISREG(file_type.st_mode)){
 	  //function to write data for bmp file or a regular file
 	  read_bmp_reg(filePath, entry->d_name, w_h, &data_file, checkFileExtension(entry_name));
-	  strcpy(entry_name, entry->d_name);//copy entry->d_name in entry_name because entry_name will be modificate after checkFileExtension fucntion
-	  write_bmp_reg(dirpath_out,entry->d_name, w_h, &data_file, checkFileExtension(entry_name));
+	  strcpy(entry_name, entry->d_name);//copy entry->d_name in entry_name because entry_name will be modificate after checkFileExtension function
+	  nr_lines = write_bmp_reg(dirpath_out,entry->d_name, w_h, &data_file, checkFileExtension(entry_name));
 	  strcpy(entry_name, entry->d_name);
 	}
 	if(S_ISDIR(file_type.st_mode)){
-	  write_directory(dirpath_out, entry_name, filePath, &data_file);
+	  nr_lines = write_directory(dirpath_out, entry_name, filePath, &data_file);
 	}
 	if(S_ISLNK(file_type.st_mode)){
-	  write_link(dirpath_out, entry_name, filePath, &data_file);
+	  nr_lines = write_link(dirpath_out, entry_name, filePath, &data_file);
 	}
-	//else;
-	exit(0);
-      }
+	exit(nr_lines);
+      }else {
+          w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);
+          if (w == -1) {
+            perror("waitpid");
+            exit(EXIT_FAILURE);
+          }
+          if (WIFEXITED(wstatus)) {
+            printf("exited, status %d\n", WEXITSTATUS(wstatus));
+          } else if (WIFSIGNALED(wstatus)) {
+	    printf("killed by signal %d\n", WTERMSIG(wstatus));
+	  } else if (WIFSTOPPED(wstatus)) {
+	    printf("stopped by signal %d\n", WSTOPSIG(wstatus));
+	  } else if (WIFCONTINUED(wstatus)) {
+	    printf("continued\n");
+	  }
+      }	
       //if bmp mai fa un proces
     }
   }
-  while(wait(NULL) > 0);
   
   return_value = closedir(dir);
   Error("close input directory in main", return_value);
+
+  exit(EXIT_SUCCESS);
   
   return 0;
 }
