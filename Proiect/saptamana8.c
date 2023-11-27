@@ -18,7 +18,7 @@
 #define SIZE_D 256 //for access rights char
 #define SEEK_BYTES 18 //number of bytes to be skipped
 #define MAX_R 4096 //maximum length for result
-#define MAX_FLENGTH 100
+#define MAX_LENGTH 100
 
 char *output = "_statistica.txt"; //output file name
 
@@ -129,7 +129,7 @@ void write_bmp_reg(char* dirpath_out,char* filename, uint32_t w_h[2], struct sta
 
 
   //get the file name without extension
-  char out_file[MMAX_LENGTH];
+  char out_file[MAX_LENGTH];
   strcpy(out_file, strtok(filename,"."));
   strcat(out_file, output);
 
