@@ -308,23 +308,21 @@ int write_directory(char* dirpath_out, char *filename_in, char* filepath, struct
   return nr_lines;
 }
 
-int main(int argc, char* argv[]){
-  checkArguments(argc, argv);
 
-  char* dirpath_in = argv[1];
-  char* dirpath_out = argv[2];
+void processDirectory(char *dirpath_in, char *dirpath_out) {
   int return_value = 0;
   uint32_t w_h[2];
   struct stat data_file;
-  DIR* dir = opendir(dirpath_in);//open directory
-  struct dirent* entry;
+  DIR *dir = opendir(dirpath_in); // open directory
+  struct dirent *entry;
   char entry_name[MAX_LENGTH];
   int nr_lines = 0;
-
-  if (dir == NULL) {//check if the directory exists
+  
+  if (dir == NULL) { // check if the directory exists
     perror("Error opening directory");
     exit(-1);
   }
+  
   
   //read file one by one from the directory
   while((entry = readdir(dir)) != NULL){
@@ -341,12 +339,16 @@ int main(int argc, char* argv[]){
       Error("lstat in main", return_value);
       
       pid_t pid = fork();
+      pid_t pid2;
       pid_t w ;
       int wstatus;
+      
       if(pid == -1){//error code
 	perror("Error in fork");
 	exit(EXIT_FAILURE);
       }
+
+      
       if(pid == 0){//child code
 	printf("Child PID: %jd ->  ", (intmax_t) getpid());
 	
@@ -364,30 +366,74 @@ int main(int argc, char* argv[]){
 	  nr_lines = write_link(dirpath_out, entry_name, filePath, &data_file);
 	}
 	exit(nr_lines);
-      }else {
-          w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);
-          if (w == -1) {
-            perror("waitpid");
-            exit(EXIT_FAILURE);
-          }
-          if (WIFEXITED(wstatus)) {
-            printf("exited, status %d\n", WEXITSTATUS(wstatus));
-          } else if (WIFSIGNALED(wstatus)) {
-	    printf("killed by signal %d\n", WTERMSIG(wstatus));
-	  } else if (WIFSTOPPED(wstatus)) {
-	    printf("stopped by signal %d\n", WSTOPSIG(wstatus));
-	  } else if (WIFCONTINUED(wstatus)) {
-	    printf("continued\n");
+      }
+      
+      if(pid > 0){ //parent code
+
+	if(checkFileExtension(entry_name)){
+	  strcpy(entry_name, entry->d_name);
+	  pid2 = fork();
+	  if(pid2 == -1){
+	    perror("Error fork 2");
+	    exit(EXIT_FAILURE);
 	  }
+	  
+	  if(pid2 == 0){
+	    printf("child\n");
+	    exit(0);
+	  }
+	}
+	
+	w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);
+	if (w == -1) {
+	  perror("waitpid");
+	  exit(EXIT_FAILURE);
+	}
+	if (WIFEXITED(wstatus)) {
+	  printf("exited, status %d\n", WEXITSTATUS(wstatus));
+	} else if (WIFSIGNALED(wstatus)) {
+	  printf("killed by signal %d\n", WTERMSIG(wstatus));
+	} else if (WIFSTOPPED(wstatus)) {
+	  printf("stopped by signal %d\n", WSTOPSIG(wstatus));
+	} else if (WIFCONTINUED(wstatus)) {
+	  printf("continued\n");
+	}
+
+	if(checkFileExtension(entry_name)){
+	  // așteaptă al doilea copil
+	  w = waitpid(pid2, &wstatus, WUNTRACED | WCONTINUED);
+	  if (w == -1) {
+	    perror("waitpid for second child");
+	    exit(EXIT_FAILURE);
+	  }
+	  if (WIFEXITED(wstatus)) {
+	    printf("second child exited, status %d\n", WEXITSTATUS(wstatus));
+	  } else if (WIFSIGNALED(wstatus)) {
+	    printf("second child killed by signal %d\n", WTERMSIG(wstatus));
+	  } else if (WIFSTOPPED(wstatus)) {
+	    printf("second child stopped by signal %d\n", WSTOPSIG(wstatus));
+	  } else if (WIFCONTINUED(wstatus)) {
+	    printf("second child continued\n");
+	  }
+	}
       }	
-      //if bmp mai fa un proces
     }
   }
   
   return_value = closedir(dir);
   Error("close input directory in main", return_value);
+  
+  exit(EXIT_SUCCESS);//folosit pentru a incheia procesul parinte cu un cod de iesire corespunzator
+}
 
-  exit(EXIT_SUCCESS);
+
+int main(int argc, char* argv[]){
+  checkArguments(argc, argv);
+  
+  char* dirpath_in = argv[1];
+  char* dirpath_out = argv[2];
+  
+  processDirectory(dirpath_in, dirpath_out);
   
   return 0;
 }
