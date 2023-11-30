@@ -308,15 +308,152 @@ int write_directory(char* dirpath_out, char *filename_in, char* filepath, struct
   return nr_lines;
 }
 
+   
+//BitCount = nr de bits pe pixel si e pe 2 bytes, setem cursorul la pozitia 28 din file si citim BitCount, dupa care mutam cursorul la pozitia 54 in functie de inceputul fisierului 
+void convertToGray(char* filename, char* filepath){
+  //citim primii 54 de bytes din fisier, pentru ca se cere sa se citeasca tot, altfel puteam direct cu lseek;
+  int return_value = 0;
+  char result[MAX_LENGTH];
+  
+  int filedes_in = open(filepath, O_RDWR);
+  sprintf(result, "open %s in convertToGray", filepath);
+  Error(result, filedes_in);
 
+  printf("%s\n", filepath);
+  
+  uint32_t width = 0 , height = 0;
+  unsigned char pixel[3];
+  
+  return_value = lseek(filedes_in, 28, SEEK_SET);//set the currsor
+  Error("lseek in 'read_bmp_reg'", return_value);
+
+  uint16_t BitCount;
+  return_value = read(filedes_in, &BitCount, sizeof(BitCount));
+  Error("Bit count read", return_value);
+  printf("%u\n", BitCount);
+  //aici facem un switch sa vedem cati bits per pixel avem, daca BitCount = 8 avem 256 si asa mai departe
+  
+  
+  return_value = lseek(filedes_in, SEEK_BYTES, SEEK_SET);//set the currsor la pozitia 18
+  Error("lseek in 'read_bmp_reg'", return_value);
+
+  //citire width si height pentru imagine,deoarece inca nu a fost salvata valoarea in h_w[2], aprocesul 2 pt imaginea bmp se face inaintea procesului 1
+  //puteam sa si salvez h si w in w_h[2] si sa nu mai citesc dupa
+  return_value = read(filedes_in, &width, sizeof(width));
+  Error("read width 'read_bmp_reg'", return_value);
+    
+  return_value = read(filedes_in, &height, sizeof(height));
+  Error("read height in 'read_bmp_reg'", return_value);
+  lseek(filedes_in, 54, SEEK_SET);
+
+   
+  printf("%u %u\n", width, height);
+  
+  int size = width*height;
+  
+  
+  //mai jos ar fi in C folosind functii de biblioteca. Noi facem cu functii sistem, definim un uint8_t sau cat ar trebui pentru fiecare, citim fiecare pixel si dupa il rescriem dupa formatare
+  
+  
+  //mai jos ar fi in C folosind functii de biblioteca. Noi facem cu functii sistem, definim un uint8_t sau cat ar trebui pentru fiecare, citim fiecare pixel si dupa il rescriem dupa formatare
+  if(BitCount > 8) {//color table present
+    
+    for(int i = 0; i < size; ++i){
+      return_value = read(filedes_in, pixel, 3);
+      Error("read from bmp %d", return_value);
+      unsigned char gri = (0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]);
+      lseek(filedes_in, -3, SEEK_CUR);
+      pixel[0]=pixel[1]=pixel[2] =gri;
+      return_value = write(filedes_in, pixel, 3);
+      Error("write in bmp %d", return_value);
+    }
+  }
+  if(BitCount <= 8){
+    //1 byte=r , 1 byte = g, 1 byte = b
+    //avem un tabel de 1024 bytes
+    uint8_t padding;
+    for(int i = 0; i < 256; ++i){
+      return_value = read(filedes_in, pixel, sizeof(pixel));
+      Error("read pixel 8x8", return_value);
+      return_value = lseek(filedes_in, -3, SEEK_CUR);
+      Error("lseek in 8x8", return_value);
+      unsigned char gri = (0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]);
+      pixel[0] = pixel[1] = pixel[2] = gri;
+      return_value = write(filedes_in, pixel, 3);
+      Error("write pixel in 8x8", return_value);
+      return_value = read(filedes_in, &padding, sizeof(padding));
+      Error("read padding", return_value);
+    }
+  }
+  
+  close(filedes_in);
+}
+
+
+
+void gray(char* filepath, char* filename){
+  int return_value = 0;
+  char result[MAX_LENGTH];
+  
+  int filedes_in = open(filepath, O_RDWR);
+  sprintf(result, "open %s in convertToGray", filepath);
+  Error(result, filedes_in);
+  
+  printf("%s\n", filepath);
+  
+  uint32_t width = 0 , height = 0;
+  unsigned char pixel[3];
+  return_value = lseek(filedes_in, 28, SEEK_SET);//set the currsor
+  Error("lseek in 'read_bmp_reg'", return_value);
+
+  uint16_t BitCount;
+  return_value = read(filedes_in, &BitCount, sizeof(BitCount));
+  Error("Bit count read", return_value);
+  printf("%u\n", BitCount);
+  
+  //citire width si height pentru imagine,deoarece inca nu a fost salvata valoarea in h_w[2], aprocesul 2 pt imaginea bmp se face inaintea procesului 1
+  //puteam sa si salvez h si w in w_h[2] si sa nu mai citesc dupa
+  return_value = lseek(filedes_in, SEEK_BYTES, SEEK_SET);
+  return_value = read(filedes_in, &width, sizeof(width));
+  Error("read width 'read_bmp_reg'", return_value);
+  
+  //  return_value = read(filedes_in, &height, sizeof(height));
+  Error("read height in 'read_bmp_reg'", return_value);
+  
+  printf("%u %u\n", width, height);
+  
+  lseek(filedes_in, 54, SEEK_SET);
+  
+  //mai jos ar fi in C folosind functii de biblioteca. Noi facem cu functii sistem, definim un uint8_t sau cat ar trebui pentru fiecare, citim fiecare pixel si dupa il rescriem dupa formatare
+  //if(bitDepth <= 8) //color table present
+  
+  if(BitCount > 8){ 
+    int size = width*height;
+    
+    for(int i = 0; i < size; ++i){
+      return_value = read(filedes_in, pixel, 3);
+      Error("read from bmp %d", return_value);
+      unsigned char gri = (0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]);
+      lseek(filedes_in, -3, SEEK_CUR);
+      pixel[0]=pixel[1]=pixel[2] =gri;
+      return_value = write(filedes_in, pixel, 3);
+      Error("write in bmp %d", return_value);
+    }
+    
+    close(filedes_in);
+  }
+}
+  
+  
 void processDirectory(char *dirpath_in, char *dirpath_out) {
   int return_value = 0;
-  uint32_t w_h[2];
+  uint32_t w_h[2];    //4 bytes width, 4 bytes height
   struct stat data_file;
   DIR *dir = opendir(dirpath_in); // open directory
   struct dirent *entry;
   char entry_name[MAX_LENGTH];
   int nr_lines = 0;
+  char aux[100];
   
   if (dir == NULL) { // check if the directory exists
     perror("Error opening directory");
@@ -333,6 +470,7 @@ void processDirectory(char *dirpath_in, char *dirpath_out) {
       strcpy(filePath, dirpath_in);//add 'SO' => 'SO'
       strcat(filePath, "/");//add '/' => 'SO/'
       strcat(filePath, entry->d_name); //add file name 'ex1.c' => 'SO/ex1.c'
+      strcpy(aux, filePath);
       
       struct stat file_type;
       return_value = lstat(filePath, &file_type);
@@ -349,9 +487,8 @@ void processDirectory(char *dirpath_in, char *dirpath_out) {
       }
 
       
-      if(pid == 0){//child code
-	printf("Child PID: %jd ->  ", (intmax_t) getpid());
-	
+      if(pid == 0){//child 1  code
+        //printf("C1: %d p-> %d\n", getpid(), getppid());
 	if(S_ISREG(file_type.st_mode)){
 	  //function to write data for bmp file or a regular file
 	  read_bmp_reg(filePath, entry->d_name, w_h, &data_file, checkFileExtension(entry_name));
@@ -369,45 +506,35 @@ void processDirectory(char *dirpath_in, char *dirpath_out) {
       }
       
       if(pid > 0){ //parent code
-
+	
 	if(checkFileExtension(entry_name)){
 	  strcpy(entry_name, entry->d_name);
 	  pid2 = fork();
+	  
 	  if(pid2 == -1){
 	    perror("Error fork 2");
 	    exit(EXIT_FAILURE);
 	  }
 	  
-	  if(pid2 == 0){
-	    printf("child\n");
+	  if(pid2 == 0){ //child 2 code
+	    //printf("C2: %d p-> %d\n",getpid(), getppid());
+	     convertToGray(entry_name, aux);
 	    exit(0);
 	  }
-	}
-	
-	w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);
-	if (w == -1) {
-	  perror("waitpid");
-	  exit(EXIT_FAILURE);
-	}
-	if (WIFEXITED(wstatus)) {
-	  printf("exited, status %d\n", WEXITSTATUS(wstatus));
-	} else if (WIFSIGNALED(wstatus)) {
-	  printf("killed by signal %d\n", WTERMSIG(wstatus));
-	} else if (WIFSTOPPED(wstatus)) {
-	  printf("stopped by signal %d\n", WSTOPSIG(wstatus));
-	} else if (WIFCONTINUED(wstatus)) {
-	  printf("continued\n");
+	  
 	}
 
-	if(checkFileExtension(entry_name)){
+	
+	if(checkFileExtension(entry_name)){//se putea si cu pid2>0, dar ar fi ramas pid2 > 0 de la un copil2 atunci ramane acelasi si intra in wait(pid2), dar nu eexista pid2 => afiseaza "waited fpr second child"
 	  // așteaptă al doilea copil
+	  strcpy(entry_name, entry->d_name);
 	  w = waitpid(pid2, &wstatus, WUNTRACED | WCONTINUED);
 	  if (w == -1) {
 	    perror("waitpid for second child");
 	    exit(EXIT_FAILURE);
 	  }
 	  if (WIFEXITED(wstatus)) {
-	    printf("second child exited, status %d\n", WEXITSTATUS(wstatus));
+	    printf("S-a incheiat procesul cu PID2-ul %i si codul %d\n",pid2, WEXITSTATUS(wstatus));
 	  } else if (WIFSIGNALED(wstatus)) {
 	    printf("second child killed by signal %d\n", WTERMSIG(wstatus));
 	  } else if (WIFSTOPPED(wstatus)) {
@@ -416,6 +543,21 @@ void processDirectory(char *dirpath_in, char *dirpath_out) {
 	    printf("second child continued\n");
 	  }
 	}
+	w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);
+	if (w == -1) {
+	  perror("waitpid");
+	  exit(EXIT_FAILURE);
+	}
+	if (WIFEXITED(wstatus)) {
+	  printf("S-a incheiat procesul cu PID-ul %i si codul %d\n",pid, WEXITSTATUS(wstatus));
+	} else if (WIFSIGNALED(wstatus)) {
+	  printf("killed by signal %d\n", WTERMSIG(wstatus));
+	} else if (WIFSTOPPED(wstatus)) {
+	  printf("stopped by signal %d\n", WSTOPSIG(wstatus));
+	} else if (WIFCONTINUED(wstatus)) {
+	  printf("continued\n");
+	}
+	
       }	
     }
   }
