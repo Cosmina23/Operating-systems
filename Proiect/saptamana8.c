@@ -438,7 +438,7 @@ void processDirectory(char *dirpath_in, char *dirpath_out) {
       
       
       if(pid == 0){//child 1  code
-        printf("C1: %d p-> %d\n", getpid(), getppid());
+        //printf("C1: %d p-> %d\n", getpid(), getppid());
 	if(S_ISREG(file_type.st_mode)){
 	  //function to write data for bmp file or a regular file
 	  read_bmp_reg(filePath, entry->d_name, w_h, &data_file, checkFileExtension(entry_name));
@@ -467,8 +467,8 @@ void processDirectory(char *dirpath_in, char *dirpath_out) {
 	  }
 	  
 	  if(pid2 == 0){ //child 2 code
-	    printf("C2: %d p-> %d\n",getpid(), getppid());
-	    //convertToGray(aux, entry_name);
+	    //printf("C2: %d p-> %d\n",getpid(), getppid());
+	    convertToGray(aux, entry_name);
 	    exit(0);
 	  } 
 	}
