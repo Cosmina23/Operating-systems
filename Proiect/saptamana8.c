@@ -32,10 +32,16 @@ void checkArguments(int argc, char* argv[]) {
 
 
 //functie pentru testarea valorii returnate de functiile sistem folosite in program, functioneaza pentru functiile care returneaza -1 in caz de eroare
-void Error(const char *function, int ret){
-  if(ret == -1){
-    printf("Error in %s function\n", function);
-    exit(-1);
+//function -> functia de biblioteca/sistem utilizata
+//local_function -> numele functiei definite de noi in program, unde am utilizat functia sistem/de biblioteca
+//filename -> numele fisierului pentru care s-a utilizat functia 'function'
+//return_value -> valoarea returnata de 'function'
+void Error(char* function, char* local_function, char* filename, int return_value){
+  char message[MAX_LENGTH];
+  sprintf(message, "Error in %s->%s for %s\n",function, local_function, filename);
+  if(return_value == -1){
+    perror(message);
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -57,7 +63,7 @@ char *drepturi(struct stat *data_file){
   mode_t mode = data_file->st_mode;
   if (sir == NULL) {
     perror("Error allocating memoryin 'drepturi' ");
-    exit(-1);
+    exit(EXIT_FAILURE);
   }
   
   sprintf(sir, "drept de acces user: %c%c%c\n",
@@ -81,51 +87,48 @@ char *drepturi(struct stat *data_file){
 
 
 //function for writing the data in the output file
-void writeOutput(int file_des, char *output, const char* error_message){
+void writeOutput(int file_des, char *output, char* function, char* local_function, char* filename){
   int return_value = 0;
   
   return_value = write(file_des, output, strlen(output));
   if(return_value == -1){
-    Error(error_message, return_value);
+    Error(function, local_function, filename, return_value);
   }
 }
 
 //extract data from input file
 void read_bmp_reg(char* filepath_in, char* filename, uint32_t w_h[2], struct stat *data_file, int bmp){
-  char result[MAX_R];
 
   int filedes_in = open(filepath_in, O_RDONLY);
-  sprintf(result,"open %s in read_bmp_reg", filepath_in);
-  Error(result, filedes_in);
+  Error("open", "read_bmp_reg", filename, filedes_in);
   
   int return_value = 0; //use to check if it's an error
   if(bmp){
     return_value = lseek(filedes_in, SEEK_BYTES, SEEK_CUR);//set the currsor
-    Error("lseek in 'read_bmp_reg'", return_value);
+    Error("lseek", "read_bmp_reg", filename, return_value);
     
     return_value = read(filedes_in, &w_h[0], sizeof(w_h[0]));
-    Error("read width 'read_bmp_reg'", return_value);
+    Error("read width", "read_bmp_reg", filename, return_value);
     
     return_value = read(filedes_in, &w_h[1], sizeof(w_h[1]));
-    Error("read height in 'read_bmp_reg'", return_value);
+    Error("read hight", "read_bmp_reg", filename, return_value);
   }
   
   return_value = stat(filepath_in, data_file);
-  Error("stat in 'read_bmp_reg'", return_value);
+  Error("stat", "read_bmp_reg", filename, return_value);
 
   return_value = close(filedes_in);
-  sprintf(result, "close %s in read_bmp_reg", filepath_in);
-  Error(result, return_value);
+  Error("close", "read_bmp_reg", filename, return_value);
 }
 
 
 //function to write bmp data
 int write_bmp_reg(char* dirpath_out,char* filename, uint32_t w_h[2], struct stat *data_file, int bmp){
   int nr_lines = 0;
-  int return_value = 0; //used to check 'close' 
-  char result[MAX_R];
+  char result[MAX_LENGTH];
+  int return_value = 0; //used to check 'close'
   char *rights = drepturi(data_file);
-  char file_name[MAX_LENGTH];
+  char file_name[MAX_LENGTH/2];
   strcpy(file_name, filename);
 
 
@@ -143,8 +146,7 @@ int write_bmp_reg(char* dirpath_out,char* filename, uint32_t w_h[2], struct stat
 
   //open the output file
   int filedes_out = open(out_file ,O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR);
-  sprintf(result, "open %s in write_bmp_reg", out_file);
-  Error(result, filedes_out);
+  Error("open", "write_bmp_reg", filename, filedes_out);
 
   //the time of the last modification of the content
   //if the name or data had to be modified: st->ctime
@@ -156,48 +158,47 @@ int write_bmp_reg(char* dirpath_out,char* filename, uint32_t w_h[2], struct stat
 
   //PRINT FILE NAME--------------------------------
   sprintf(result, "nume fisier: %s\n", file_name);
-  writeOutput(filedes_out, result, "Error write: nume in write_bmp_reg");
+  writeOutput(filedes_out, result, " write: nume", "write_bmp_reg", filename);
   nr_lines++;
 
   //if the input file is bmp file write height and width
   if(bmp){
     sprintf(result, "inaltime: %u\n", w_h[0]);
-    writeOutput(filedes_out, result, "Error write: width in write_bmp_reg");
+    writeOutput(filedes_out, result, "write: width", "write_bmp_reg", filename);
     nr_lines++;
     
     sprintf(result, "lungime: %u\n", w_h[1]);
-    writeOutput(filedes_out, result, "Error write: height in write_bmp_reg");
+    writeOutput(filedes_out, result, "write: height", "write_bmp_reg", filename);
     nr_lines++;
   }
   
   sprintf(result, "dimensiune: %lu\n", data_file->st_size);
-  writeOutput(filedes_out, result, "Error write: size in write_bmp_reg");
+  writeOutput(filedes_out, result, "write: size", "write_bmp_reg", filename);
   nr_lines++;
 
   sprintf(result, "identificatorul utilizatorului: %u\n", data_file->st_uid);
-  writeOutput(filedes_out, result, "Error write: uid in write_bmp_reg");
+  writeOutput(filedes_out, result, "write: uid", "write_bmp_reg", filename);
   nr_lines++;
 
   sprintf(result, "timpul ultimei modificari: %d.%d.%d\n", dt->tm_mday + 1, dt->tm_mon + 1, dt->tm_year + 1900);
-  writeOutput(filedes_out, result, "Error write: time in write_bmp_reg");
+  writeOutput(filedes_out, result, "write: time", "write_bmp_reg", filename);
   nr_lines++;
 
   sprintf(result, "contorul de legaturi: %ld\n", data_file->st_nlink);
-  writeOutput(filedes_out, result, "Error write: nr links in write_bmp_reg");
+  writeOutput(filedes_out, result, "Error write: nr links", "write_bmp_reg", filename);
   nr_lines++;
 
-  writeOutput(filedes_out, rights, "Error write: rigths in write_bmp_reg");
+  writeOutput(filedes_out, rights, "Error write: rigths", "write_bmp_reg", filename);
   nr_lines += 3;
 
   return_value = close(filedes_out);
-  sprintf(result, "close %s in write_bmp_reg", out_file);
-  Error(result, return_value);
+  Error("close", "write_bmp_reg", filename, return_value);
 
   return nr_lines;
 }
 
 
-int write_link(char* dirpath_out, char* filename_link, char* filePath_input, struct stat *data_file){
+int read_write_link(char* dirpath_out, char* filename_link, char* filePath_input, struct stat *data_file){
   int nr_lines = 0;
   int return_value = 0;
   char result[MAX_R];
@@ -218,49 +219,44 @@ int write_link(char* dirpath_out, char* filename_link, char* filePath_input, str
   strcpy(out_file, aux);
 
   return_value = stat(filePath_input,&target_info);
-  sprintf(result, "stat for %s in write_link", filename_link);
-  Error(result, return_value);
+  Error("stat","write_link", filename_link , return_value);
   
   if(S_ISREG(target_info.st_mode)){
     
     int filedes_out = open(out_file ,O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR);
-    sprintf(result, "open %s in write_link", out_file);
-    Error(result, filedes_out);
+    Error("open", "write_link", filename_link, filedes_out);
     
     return_value = lstat(filePath_input, data_file);
-    sprintf(result, "lstat for %s in write_link", filename_link);
-    Error(result, return_value);
+    Error("lstat", "write_link", filename_link, return_value);
     
     //check if the target is a regular file
     sprintf(result, "nume legatura: %s\n", filename_link);
-    writeOutput(filedes_out, result, "Error write: nume in write_link");
+    writeOutput(filedes_out, result, "write: nume", "write_link", filename_link);
     nr_lines++;
     
     sprintf(result, "dimensiune: %ld\n", data_file->st_size);
-    writeOutput(filedes_out, result, "Error write: dimensiune in write_link");
+    writeOutput(filedes_out, result, "write: dimensiune", "write_link", filename_link);
     nr_lines++;
     
     sprintf(result, "dimensiune fisier: %lu\n", target_info.st_size);
-    writeOutput(filedes_out, result, "Error write: dimensiune fisier in write_link");
+    writeOutput(filedes_out, result, "write: dimensiune fisier", "write_link", filename_link);
     nr_lines++;
     
     char* rez = drepturi(data_file);
     return_value = write(filedes_out, rez, strlen(rez));
-    sprintf(result, "write rights for %s in write_link", filename_link);
-    Error(result, return_value);
+    Error("write drepturi", "write_link", filename_link, return_value);
     nr_lines += 3;
     
     free(rez);
     
     return_value = close(filedes_out);
-    sprintf(result,"close %s in write_link", filename_link);
-    Error(result, return_value);
+    Error("close", "write_link", filename_link, return_value);
   }
   return nr_lines;
 }
 
 
-int write_directory(char* dirpath_out, char *filename_in, char* filepath, struct stat *data_file){
+int read_write_directory(char* dirpath_out, char *filename_in, char* filepath, struct stat *data_file){
   int return_value = 0;
   char result[MAX_R];
   int nr_lines = 0;
@@ -281,169 +277,123 @@ int write_directory(char* dirpath_out, char *filename_in, char* filepath, struct
 
   //open the output file
   int filedes_out = open(out_file ,O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IXUSR);
-  sprintf(result, "open %s in write_directory", out_file);
-  Error(result, filedes_out);
+  Error("open", "write_directory", filename_in, filedes_out);
 
   
   sprintf(result, "nume director: %s\n", filename_in);
-  writeOutput(filedes_out, result, "Error write: nume director in write_diretory");
+  writeOutput(filedes_out, result, "write: nume director", "write_diretory", filename_in);
   nr_lines += 1;
   
   sprintf(result, "identificatorul utilizatorului: %u\n", data_file->st_uid);
-  writeOutput(filedes_out, result, "Error write: uid in write_diretory");
+  writeOutput(filedes_out, result, "write: uid", "write_diretory", filename_in);
   nr_lines += 1;
   
   char* rez = drepturi(data_file);
   return_value = write(filedes_out, rez, strlen(rez));
-  sprintf(result, "write drepturi for %s in write_directory", filename_in);
-  Error(result, return_value);
+  Error("write: drepturi", "write_directory", filename_in, return_value);
   nr_lines += 3;
   
   free(rez);
   
   return_value = close(filedes_out);
-  sprintf(result,"close %s in write_directory", filename_in);
-  Error(result, return_value);
+  Error("close", "write_diretory", filename_in, return_value);
 
   return nr_lines;
 }
 
-   
-//BitCount = nr de bits pe pixel si e pe 2 bytes, setem cursorul la pozitia 28 din file si citim BitCount, dupa care mutam cursorul la pozitia 54 in functie de inceputul fisierului 
-void convertToGray(char* filename, char* filepath){
-  //citim primii 54 de bytes din fisier, pentru ca se cere sa se citeasca tot, altfel puteam direct cu lseek;
+
+void convertToGray(char* filepath, char* filename){
   int return_value = 0;
-  char result[MAX_LENGTH];
-  
-  int filedes_in = open(filepath, O_RDWR);
-  sprintf(result, "open %s in convertToGray", filepath);
-  Error(result, filedes_in);
+  int filedes_in; //file descriptor for input file
+  uint32_t width, height;//width and height of the image, 4 bytes each
+  uint8_t red, green, blue;
+  uint8_t gray;
+  uint16_t BitCount; //number of Bits per Pixel, 2 bytes
+  int NumColors;
+  int size; //size of the image (size = width* height)
 
-  printf("%s\n", filepath);
-  
-  uint32_t width = 0 , height = 0;
-  unsigned char pixel[3];
-  
-  return_value = lseek(filedes_in, 28, SEEK_SET);//set the currsor
-  Error("lseek in 'read_bmp_reg'", return_value);
+  filedes_in = open(filepath, O_RDWR);
+  Error("open", "convertToGray", filename, filedes_in);
 
-  uint16_t BitCount;
+  //setare cursorul la pozitia 18 pentru a putea citi width si height
+  return_value = lseek(filedes_in, 18, SEEK_CUR);
+  Error("lseek 18", "convertToGray", filename, return_value);//verificare daca lseek=1
+
+  return_value = read(filedes_in, &width, sizeof(width));//citire width
+  Error("read: width", "convertToGray", filename, return_value);//verificare valoare returnata de read
+
+  return_value = read(filedes_in, &height, sizeof(height));//citire height
+  Error("read: height", "convertToGray",filename, return_value);//verificare valoare returnata de read
+  
+  //setare cursor pentru a citi BitCount 
+  return_value = lseek(filedes_in, 2, SEEK_CUR);
+  Error("lseek 2", "convertToGray", filename, return_value);//verificare valoare returnata de lseek
+
   return_value = read(filedes_in, &BitCount, sizeof(BitCount));
-  Error("Bit count read", return_value);
-  printf("%u\n", BitCount);
-  //aici facem un switch sa vedem cati bits per pixel avem, daca BitCount = 8 avem 256 si asa mai departe
-  
-  
-  return_value = lseek(filedes_in, SEEK_BYTES, SEEK_SET);//set the currsor la pozitia 18
-  Error("lseek in 'read_bmp_reg'", return_value);
+  Error("read: BitCount", "convertToGray", filename, return_value);
 
-  //citire width si height pentru imagine,deoarece inca nu a fost salvata valoarea in h_w[2], aprocesul 2 pt imaginea bmp se face inaintea procesului 1
-  //puteam sa si salvez h si w in w_h[2] si sa nu mai citesc dupa
-  return_value = read(filedes_in, &width, sizeof(width));
-  Error("read width 'read_bmp_reg'", return_value);
-    
-  return_value = read(filedes_in, &height, sizeof(height));
-  Error("read height in 'read_bmp_reg'", return_value);
-  lseek(filedes_in, 54, SEEK_SET);
+  //setare cursor la pozitia pixelilor(byte-ul 54), 24 bytes fata de pozitia curenta
+  return_value = lseek(filedes_in, 24, SEEK_CUR);
+  Error("lseek 24", "convertToGray", filename, return_value);
 
-   
-  printf("%u %u\n", width, height);
-  
-  int size = width*height;
-  
-  
-  //mai jos ar fi in C folosind functii de biblioteca. Noi facem cu functii sistem, definim un uint8_t sau cat ar trebui pentru fiecare, citim fiecare pixel si dupa il rescriem dupa formatare
-  
-  
-  //mai jos ar fi in C folosind functii de biblioteca. Noi facem cu functii sistem, definim un uint8_t sau cat ar trebui pentru fiecare, citim fiecare pixel si dupa il rescriem dupa formatare
-  if(BitCount > 8) {//color table present
-    
-    for(int i = 0; i < size; ++i){
-      return_value = read(filedes_in, pixel, 3);
-      Error("read from bmp %d", return_value);
-      unsigned char gri = (0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]);
-      lseek(filedes_in, -3, SEEK_CUR);
-      pixel[0]=pixel[1]=pixel[2] =gri;
-      return_value = write(filedes_in, pixel, 3);
-      Error("write in bmp %d", return_value);
+  //verificare daca numarul de bits per pixel <= 8
+  if(BitCount <= 8){//daca BitCount = 8 se verifica valoarea exacta pentru a seta Numarul de Culori
+    switch(BitCount){
+    case 1:
+      NumColors = 1;
+      break;
+    case 4:
+      NumColors = 16;
+      break;
+    case 8:
+      NumColors = 256;
+      break;
     }
+    size = NumColors; //size = NumColors * 4, dar citim cate 4 bytes din tabel,deci avem 256 de citiri din tabel, 256 ori parcurgere de for
   }
-  if(BitCount <= 8){
-    //1 byte=r , 1 byte = g, 1 byte = b
-    //avem un tabel de 1024 bytes
-    uint8_t padding;
-    for(int i = 0; i < 256; ++i){
-      return_value = read(filedes_in, pixel, sizeof(pixel));
-      Error("read pixel 8x8", return_value);
-      return_value = lseek(filedes_in, -3, SEEK_CUR);
-      Error("lseek in 8x8", return_value);
-      unsigned char gri = (0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]);
-      pixel[0] = pixel[1] = pixel[2] = gri;
-      return_value = write(filedes_in, pixel, 3);
-      Error("write pixel in 8x8", return_value);
+
+  if(BitCount > 8){//daca BitCount > 8 setam sizeul pentru imagine
+    size = width*height;
+  }
+   
+  for(int i = 0; i < size; ++i){//conversie din rgb in grayscale pentru fiecare bit
+    return_value = read(filedes_in, &red, sizeof(red));//citire valoare red
+    Error("read red ", "convertToGray", filename, return_value);
+
+    return_value = read(filedes_in, &green, sizeof(green));//citire valoare green
+    Error("read green ", "convertToGray", filename, return_value);
+
+    return_value = read(filedes_in, &blue, sizeof(blue));//citire valoare blue
+    Error("read blue ", "convertToGray", filename, return_value);
+    
+    return_value = lseek(filedes_in, -3, SEEK_CUR);//setare cursor pentru a suprascrie valorile pentru red,green,blue
+    Error("lseek ", "convertToGray", filename, return_value);
+    
+    gray = (0.299 * red + 0.587 * green + 0.114 * blue);
+
+    //suprascriere valori red,green,blue cu valoarea gray
+    return_value = write(filedes_in, &gray, sizeof(gray));
+    Error("write red ", "convertToGray", filename, return_value);
+
+    return_value = write(filedes_in, &gray, sizeof(gray));
+    Error("write red ", "convertToGray", filename, return_value);
+
+    return_value = write(filedes_in, &gray, sizeof(gray));
+    Error("write red ", "convertToGray", filename, return_value);
+
+    //daca BitCount <= 8, trebuie sa sarim peste byte-ul de padding din tabel
+    if(BitCount <= 8){
+      uint8_t padding; //utilizat pentru a sari byteul nefolosit in tabel( = 0)
       return_value = read(filedes_in, &padding, sizeof(padding));
-      Error("read padding", return_value);
+      Error("read padding", "convertToGray", filename, return_value);
     }
   }
   
-  close(filedes_in);
-}
+  //inchidere fisier de intrare
+  return_value = close(filedes_in);
+  Error("close", "convertToGray", filename, return_value);
+} 
 
-
-
-void gray(char* filepath, char* filename){
-  int return_value = 0;
-  char result[MAX_LENGTH];
-  
-  int filedes_in = open(filepath, O_RDWR);
-  sprintf(result, "open %s in convertToGray", filepath);
-  Error(result, filedes_in);
-  
-  printf("%s\n", filepath);
-  
-  uint32_t width = 0 , height = 0;
-  unsigned char pixel[3];
-  return_value = lseek(filedes_in, 28, SEEK_SET);//set the currsor
-  Error("lseek in 'read_bmp_reg'", return_value);
-
-  uint16_t BitCount;
-  return_value = read(filedes_in, &BitCount, sizeof(BitCount));
-  Error("Bit count read", return_value);
-  printf("%u\n", BitCount);
-  
-  //citire width si height pentru imagine,deoarece inca nu a fost salvata valoarea in h_w[2], aprocesul 2 pt imaginea bmp se face inaintea procesului 1
-  //puteam sa si salvez h si w in w_h[2] si sa nu mai citesc dupa
-  return_value = lseek(filedes_in, SEEK_BYTES, SEEK_SET);
-  return_value = read(filedes_in, &width, sizeof(width));
-  Error("read width 'read_bmp_reg'", return_value);
-  
-  //  return_value = read(filedes_in, &height, sizeof(height));
-  Error("read height in 'read_bmp_reg'", return_value);
-  
-  printf("%u %u\n", width, height);
-  
-  lseek(filedes_in, 54, SEEK_SET);
-  
-  //mai jos ar fi in C folosind functii de biblioteca. Noi facem cu functii sistem, definim un uint8_t sau cat ar trebui pentru fiecare, citim fiecare pixel si dupa il rescriem dupa formatare
-  //if(bitDepth <= 8) //color table present
-  
-  if(BitCount > 8){ 
-    int size = width*height;
-    
-    for(int i = 0; i < size; ++i){
-      return_value = read(filedes_in, pixel, 3);
-      Error("read from bmp %d", return_value);
-      unsigned char gri = (0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]);
-      lseek(filedes_in, -3, SEEK_CUR);
-      pixel[0]=pixel[1]=pixel[2] =gri;
-      return_value = write(filedes_in, pixel, 3);
-      Error("write in bmp %d", return_value);
-    }
-    
-    close(filedes_in);
-  }
-}
-  
   
 void processDirectory(char *dirpath_in, char *dirpath_out) {
   int return_value = 0;
@@ -474,40 +424,40 @@ void processDirectory(char *dirpath_in, char *dirpath_out) {
       
       struct stat file_type;
       return_value = lstat(filePath, &file_type);
-      Error("lstat in main", return_value);
+      Error("lstat", "processDirectory", dirpath_in, return_value);
       
-      pid_t pid = fork();
       pid_t pid2;
       pid_t w ;
       int wstatus;
+      pid_t pid = fork();//child 1
       
       if(pid == -1){//error code
 	perror("Error in fork");
 	exit(EXIT_FAILURE);
       }
-
+      
       
       if(pid == 0){//child 1  code
-        //printf("C1: %d p-> %d\n", getpid(), getppid());
+        printf("C1: %d p-> %d\n", getpid(), getppid());
 	if(S_ISREG(file_type.st_mode)){
 	  //function to write data for bmp file or a regular file
 	  read_bmp_reg(filePath, entry->d_name, w_h, &data_file, checkFileExtension(entry_name));
-	  strcpy(entry_name, entry->d_name);//copy entry->d_name in entry_name because entry_name will be modificate after checkFileExtension function
+	  //copy entry->d_name in entry_name because entry_name will be modificate after checkFileExtension function
+	  strcpy(entry_name, entry->d_name);
 	  nr_lines = write_bmp_reg(dirpath_out,entry->d_name, w_h, &data_file, checkFileExtension(entry_name));
 	  strcpy(entry_name, entry->d_name);
 	}
-	if(S_ISDIR(file_type.st_mode)){
-	  nr_lines = write_directory(dirpath_out, entry_name, filePath, &data_file);
+	if(S_ISDIR(file_type.st_mode)){//if input file is directory read and write data in statistica.txt
+	  nr_lines = read_write_directory(dirpath_out, entry_name, filePath, &data_file);
 	}
-	if(S_ISLNK(file_type.st_mode)){
-	  nr_lines = write_link(dirpath_out, entry_name, filePath, &data_file);
+	if(S_ISLNK(file_type.st_mode)){//if input file is Link read and write data in statistica.txt
+	  nr_lines = read_write_link(dirpath_out, entry_name, filePath, &data_file);
 	}
-	exit(nr_lines);
+	exit(nr_lines);//send nr_lines from child to parent process
       }
       
       if(pid > 0){ //parent code
-	
-	if(checkFileExtension(entry_name)){
+	if(checkFileExtension(entry_name)){//if the file have bmp extension make the 2nd child
 	  strcpy(entry_name, entry->d_name);
 	  pid2 = fork();
 	  
@@ -517,55 +467,54 @@ void processDirectory(char *dirpath_in, char *dirpath_out) {
 	  }
 	  
 	  if(pid2 == 0){ //child 2 code
-	    //printf("C2: %d p-> %d\n",getpid(), getppid());
-	     convertToGray(entry_name, aux);
+	    printf("C2: %d p-> %d\n",getpid(), getppid());
+	    //convertToGray(aux, entry_name);
 	    exit(0);
+	  } 
+	}
+	if(pid > 0){ //cod parinte
+	  if(checkFileExtension(entry_name)){//se putea si cu pid2>0, dar ar fi ramas pid2 > 0 de la un copil2 atunci ramane acelasi si intra in wait(pid2), dar nu eexista pid2 => afiseaza "waited fpr second child"
+	    // așteaptă al doilea copil
+	    strcpy(entry_name, entry->d_name);
+	    w = waitpid(pid2, &wstatus, WUNTRACED | WCONTINUED);//waitpid for child2
+	    if (w == -1) {
+	      perror("waitpid for second child");
+	      exit(EXIT_FAILURE);
+	    }
+	    if (WIFEXITED(wstatus)) {
+	      printf("S-a incheiat procesul cu PID2-ul %i si codul %d\n",pid2, WEXITSTATUS(wstatus));
+	    } else if (WIFSIGNALED(wstatus)) {
+	      printf("second child killed by signal %d\n", WTERMSIG(wstatus));
+	    } else if (WIFSTOPPED(wstatus)) {
+	      printf("second child stopped by signal %d\n", WSTOPSIG(wstatus));
+	    } else if (WIFCONTINUED(wstatus)) {
+	      printf("second child continued\n");
+	    }
 	  }
 	  
-	}
-
-	
-	if(checkFileExtension(entry_name)){//se putea si cu pid2>0, dar ar fi ramas pid2 > 0 de la un copil2 atunci ramane acelasi si intra in wait(pid2), dar nu eexista pid2 => afiseaza "waited fpr second child"
-	  // așteaptă al doilea copil
-	  strcpy(entry_name, entry->d_name);
-	  w = waitpid(pid2, &wstatus, WUNTRACED | WCONTINUED);
+	  w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);//waitpid for child1
 	  if (w == -1) {
-	    perror("waitpid for second child");
+	    perror("waitpid");
 	    exit(EXIT_FAILURE);
 	  }
 	  if (WIFEXITED(wstatus)) {
-	    printf("S-a incheiat procesul cu PID2-ul %i si codul %d\n",pid2, WEXITSTATUS(wstatus));
+	  printf("S-a incheiat procesul cu PID-ul %i si codul %d\n",pid, WEXITSTATUS(wstatus));
 	  } else if (WIFSIGNALED(wstatus)) {
-	    printf("second child killed by signal %d\n", WTERMSIG(wstatus));
+	    printf("killed by signal %d\n", WTERMSIG(wstatus));
 	  } else if (WIFSTOPPED(wstatus)) {
-	    printf("second child stopped by signal %d\n", WSTOPSIG(wstatus));
+	    printf("stopped by signal %d\n", WSTOPSIG(wstatus));
 	  } else if (WIFCONTINUED(wstatus)) {
-	    printf("second child continued\n");
+	    printf("continued\n");
 	  }
 	}
-	w = waitpid(pid, &wstatus, WUNTRACED | WCONTINUED);
-	if (w == -1) {
-	  perror("waitpid");
-	  exit(EXIT_FAILURE);
-	}
-	if (WIFEXITED(wstatus)) {
-	  printf("S-a incheiat procesul cu PID-ul %i si codul %d\n",pid, WEXITSTATUS(wstatus));
-	} else if (WIFSIGNALED(wstatus)) {
-	  printf("killed by signal %d\n", WTERMSIG(wstatus));
-	} else if (WIFSTOPPED(wstatus)) {
-	  printf("stopped by signal %d\n", WSTOPSIG(wstatus));
-	} else if (WIFCONTINUED(wstatus)) {
-	  printf("continued\n");
-	}
-	
       }	
     }
   }
   
   return_value = closedir(dir);
-  Error("close input directory in main", return_value);
+  Error("close input directory", "main", dirpath_in, return_value);
   
-  exit(EXIT_SUCCESS);//folosit pentru a incheia procesul parinte cu un cod de iesire corespunzator
+  exit(EXIT_SUCCESS);//folosit pentru a incheia procesul parinte cu un cod de iesire corespunzator, daca s-a ajusn la final inseamna ca procesul a avut suces
 }
 
 
