@@ -472,12 +472,20 @@ void processDirectory(char *dirpath_in, char *dirpath_out, char c_in) {
 	  if(checkFileExtension(entry_name) == 0){//daca e fisier obisnuit , dar nu bmp trimite continutul fisierului la al doilea copil
 	    strcpy(entry_name, entry->d_name);
 	    
-	    close(pfd2[0]);
-	    close(pfd2[1]);
+	    return_value = close(pfd2[0]);
+	    Error("close pfd2[0] for child1", "processDirectory", dirpath_in, return_value);
+
+	    return_value = close(pfd2[1]);
+	    Error("close pfd2[1] for child1", "processDirectory", dirpath_in, return_value);
+
 	    
-	    close(pfd1[0]);//inchide capat de citire
+	    return_value = close(pfd1[0]);
+	    Error("close pfd1[0] for child1", "processDirectory", dirpath_in, return_value);
+
 	    
-	    dup2(pfd1[1], 1);
+	    return_value = dup2(pfd1[1], 1);
+	    Error("close dup2 for child1", "processDirectory", dirpath_in, return_value);
+
 	    
 	    execlp("cat", "cat", aux, NULL);
 	    perror("Execlp 1");
@@ -510,12 +518,18 @@ void processDirectory(char *dirpath_in, char *dirpath_out, char c_in) {
 	    exit(0);
 	  }
 	  else{//if the file is regular, but don't have 'bmp' extension
-	    close(pfd1[1]);//inchide capat de scriere pentru pipe1
-	    close(pfd2[0]);//inchide capat de citire pentru pip2
-	    
-	    dup2(pfd1[0], 0);//citim de pe pipe1
-	    dup2(pfd2[1], 1);//iesirea standard sa fie pipe2
-	    
+	    return_value = close(pfd1[1]);
+	    Error("close pfd1[1] for child2", "processDirectory", dirpath_in, return_value);
+
+	    return_value = close(pfd2[0]);
+	    Error("close pfd2[0] for child2", "processDirectory", dirpath_in, return_value);
+
+	    return_value = dup2(pfd1[0], 0);//citim de pe pipe1
+	    Error("dup2 pfd1[0] for parent", "processDirectory", dirpath_in, return_value);
+      
+	    return_value = dup2(pfd2[1], 1);//iesirea standard sa fie pipe2
+	    Error("dup2 pfd2[1] for parent", "processDirectory", dirpath_in, return_value);
+      
 	    execlp("bash", "bash", script, &c_in, NULL);
 	    perror("Execlp 2");
 	    exit(EXIT_FAILURE);
@@ -523,25 +537,38 @@ void processDirectory(char *dirpath_in, char *dirpath_out, char c_in) {
 	}//else if(pid2==0)
       }//if(S_ISREG)
 
-      //cod parinte
+      
+      //cod proces parinte
+      
+      return_value = close(pfd1[0]);
+      Error("close pfd1[0] for parent", "processDirectory", dirpath_in, return_value);
 
+      return_value = close(pfd1[1]);
+      Error("close pfd1[1] for parent", "processDirectory", dirpath_in, return_value);
+
+      return_value = close(pfd2[1]);
+      Error("close pfd2[1] for parent", "processDirectory", dirpath_in, return_value);
       
-      close(pfd1[0]);
-      close(pfd1[1]);
-      close(pfd2[1]);
+      return_value = dup2(pfd2[0], 0);//redirectare intrare,datele o sa fie luate din pipe2=  pdf2[0]
+      Error(" dup2 pfd2 for parent", "processDirectory", dirpath_in, return_value);
       
-      dup2(pfd2[0], 0);//redirectare intrare,datele o sa fie luate din pipe2=  pdf2[0]
       
-      FILE* stream = fdopen(pfd2[0], "r");
-      
-      int c;
-      while (fscanf(stream, "%d", &c) != EOF) {
-	sum += c;
+      FILE* pipe = fdopen(pfd2[0], "r");
+
+      if(pipe == NULL){
+	perror("Error for open pfd2[0] for parent");
+	exit(EXIT_FAILURE);
       }
       
-      close(pfd2[0]);//inchide capatul utilizat
-      
-      
+      int c;
+      while (fscanf(pipe, "%d", &c) != EOF) {
+	sum += c;
+      }
+
+      //inchide capatul utilizat
+      return_value = close(pfd2[0]);
+      Error("close pfd2[0] for parent", "processDirectory", dirpath_in, return_value);
+
       if(S_ISREG(file_type.st_mode)){//se putea si cu pid2>0, dar ar fi ramas pid2 > 0 de la un copil2 atunci ramane acelasi si intra in wait(pid2), dar nu exista pid2 => afiseaza "waited fpr second child"
 	w = waitpid(pid2, &wstatus, WUNTRACED | WCONTINUED);//waitpid for child2
 	if (w == -1) {
